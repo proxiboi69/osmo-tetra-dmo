@@ -28,6 +28,8 @@
 #include "tetra_common.h"
 #include "tetra_prim.h"
 
+struct fragslot fragslots[FRAGSLOT_NR_SLOTS];
+
 uint32_t bits_to_uint(const uint8_t *bits, unsigned int len)
 {
 	uint32_t ret = 0;

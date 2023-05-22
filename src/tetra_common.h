@@ -81,7 +81,7 @@ struct fragslot {
 	int encryption;
 };
 
-struct fragslot fragslots[FRAGSLOT_NR_SLOTS]; /* slots are 1-4 but sometimes  slot==0 */
+extern struct fragslot fragslots[FRAGSLOT_NR_SLOTS]; /* slots are 1-4 but sometimes  slot==0 */
 
 #include "tetra_tdma.h"
 struct tetra_phy_state {
