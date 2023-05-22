@@ -144,6 +144,23 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 			io_conf->rx_gain = 50;
 			io_conf->tx_gain = 70;
 
+		} else if (strcmp(hw, "sx") == 0) {
+			soapysdr_io_code.set_conf(io_conf, "device:driver", "sx");
+			//soapysdr_io_code.set_conf(io_conf, "rx_stream:link", "1");
+			//soapysdr_io_code.set_conf(io_conf, "tx_stream:link", "1");
+			io_conf->use_time = 0;
+			io_conf->tx_cont = 1;
+			io_conf->rx_antenna = "RX";
+			io_conf->tx_antenna = "TX";
+			io_conf->rx_gain = 50; // TBD
+			io_conf->tx_gain = 50; // TBD
+			// Sample rate is 1/4 times the default, so reduce buffer sizes to 1/4 too
+			io_conf->buffer /= 4;
+			io_conf->tx_latency /= 4;
+
+			samplerate = 125000.0;
+			offset_freq = 25000.0;
+
 		} else if (strcmp(hw, "audio-in") == 0) {
 			// Receive only. Full-duplex audio is not supported yet
 			io_conf->tx_on = 0;
@@ -220,6 +237,7 @@ int main(int argc, char *argv[])
 			"   limemini  LimeSDR Mini\n"
 			"   limenet   LimeNET Micro\n"
 			"   usrp      USRP B200\n"
+			"   sx        SXXCVR\n"
 			"   rtlsdr    RTL-SDR (receive only)\n"
 			"   audio-in  Audio centered at 12 kHz (receive only, through SoapyAudio)\n"
 			"   alsa:NAME Audio centered at 12 kHz (full duplex through ALSA)\n"
