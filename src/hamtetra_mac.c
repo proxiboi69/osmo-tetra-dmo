@@ -3,10 +3,19 @@
  */
 
 #include <osmocom/core/talloc.h>
+#include <osmocom/core/bits.h>
+#include <arpa/inet.h>
 
 #include "hamtetra_config.h"
 #include "hamtetra_mac.h"
 #include "hamtetra_pdu_generator.h"
+#include "lower_mac/crc_simple.h"
+#include "lower_mac/tetra_conv_enc.h"
+#include "lower_mac/tetra_interleave.h"
+#include "lower_mac/tetra_scramb.h"
+#include "lower_mac/tetra_rm3014.h"
+#include "phy/tetra_burst.h"
+#include "phy/tetra_burst_sync.h"
 
 void *tetra_tall_ctx;
 
@@ -120,6 +129,13 @@ unsigned int multiframe_counter = 0;
 uint8_t multiframes_since_last_presence = 0;
 int presence_signal_counter = 0;
 
+// TMO BTS specific variables
+static enum tetra_infrastructure_mode operating_mode = TETRA_INFRA_DMO; // Default to DMO
+static uint32_t bsch_counter = 0;
+static uint32_t sync_burst_counter = 0;
+
+#define swap16(x) ((x)<<8)|((x)>>8)
+
 void mac_hamtetra_init()
 {
     // initialize MAC state structure
@@ -131,7 +147,119 @@ void mac_hamtetra_init()
     initialize_framebuffer(0);
 
     presence_signal_counter = presence_signal_multiframe_count[DT254]*18*4;
+    
+    // Initialize TMO-specific counters
+    bsch_counter = 0;
+    sync_burst_counter = 0;
+}
 
+void mac_hamtetra_set_mode(enum tetra_infrastructure_mode mode)
+{
+    operating_mode = mode;
+    if (mode == TETRA_INFRA_TMO) {
+        printf("MAC: Setting TMO BTS mode\n");
+        tms->infra_mode = TETRA_INFRA_TMO;
+    } else {
+        printf("MAC: Setting DMO mode\n");
+        tms->infra_mode = TETRA_INFRA_DMO;
+    }
+}
+
+// TMO BTS specific function to build SYNC and BSCH bursts
+int build_tmo_sync_burst(uint8_t *bits, struct timing_slot *slot)
+{
+    // Simple TMO BTS PoC implementation
+    // Based on conv_enc_test.c build_sb() function
+    uint8_t sb_type2[80];
+    uint8_t sb_master[80*4];
+    uint8_t sb_type3[120];
+    uint8_t sb_type4[120];
+    uint8_t sb_type5[120];
+    uint8_t bb_type5[30];
+    uint8_t burst[255*2];
+    uint16_t crc;
+    uint8_t *cur;
+    uint32_t bb_rm3014, bb_rm3014_be;
+    
+    // Create basic SYNC PDU for TMO BTS
+    memset(sb_type2, 0, sizeof(sb_type2));
+    cur = sb_type2;
+    
+    // Simple SYNC PDU content - this is a PoC implementation
+    // In a full implementation, this would contain proper SYNC-PDU fields
+    uint8_t sync_pdu[] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08  // Placeholder data
+    };
+    
+    cur += osmo_pbit2ubit(sb_type2, sync_pdu, 60);
+    
+    crc = ~crc16_ccitt_bits(sb_type2, 60);
+    crc = swap16(crc);
+    cur += osmo_pbit2ubit(cur, (uint8_t *) &crc, 16);
+    
+    // Append 4 tail bits: type-2 bits
+    cur += 4;
+    
+    // Run rate 2/3 RCPC code: type-3 bits
+    struct conv_enc_state *ces = calloc(1, sizeof(*ces));
+    conv_enc_init(ces);
+    conv_enc_input(ces, sb_type2, 80, sb_master);
+    get_punctured_rate(TETRA_RCPC_PUNCT_2_3, sb_master, 120, sb_type3);
+    free(ces);
+    
+    // Run (120,11) block interleaving: type-4 bits
+    block_interleave(120, 11, sb_type3, sb_type4);
+    
+    // Run scrambling (all-zero): type-5 bits
+    memcpy(sb_type5, sb_type4, 120);
+    tetra_scramb_bits(SCRAMB_INIT, sb_type5, 120);
+    
+    // Create basic AACH content
+    uint8_t aach_data[] = {0x00, 0x01};  // Basic AACH data
+    bb_rm3014 = tetra_rm3014_compute(*(uint16_t *)aach_data);
+    bb_rm3014_be = htonl(bb_rm3014);
+    bb_rm3014_be <<= 2;
+    osmo_pbit2ubit(bb_type5, (uint8_t *) &bb_rm3014_be, 30);
+    
+    // Build the actual burst
+    build_sync_c_d_burst(burst, sb_type5, bb_type5, sb_type5); // Reuse sb_type5 for SI
+    
+    // Copy to output buffer (first 255 bits for now)
+    memcpy(bits, burst, 255);
+    
+    printf("[TMO BTS] Generated SYNC burst for slot %u/%u\n", slot->fn, slot->tn);
+    return 255;
+}
+
+int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
+{
+    int len = -1;
+    
+    printf("[TMO BTS] TX slot: %2u %2u %2u - ", slot->tn, slot->fn, slot->mn);
+    
+    // TMO BTS transmission logic
+    // For PoC, we'll transmit SYNC bursts on specific slots
+    
+    // Transmit SYNC burst on slot 1 of frame 1 and 11 (BSCH slots)
+    if (slot->tn == 1 && (slot->fn == 1 || slot->fn == 11)) {
+        printf("BSCH/SYNC - ");
+        len = build_tmo_sync_burst(bits, slot);
+        bsch_counter++;
+    }
+    // Transmit on other control slots as needed
+    else if (slot->tn == 1) {
+        printf("Control slot - ");
+        // For now, generate a simple burst or stay silent
+        len = -1; // No transmission
+    }
+    else {
+        // Traffic slots - stay silent for PoC
+        printf("Traffic slot (silent) - ");
+        len = -1;
+    }
+    
+    printf("burst len: %d\n", len);
+    return len;
 }
 
 int mac_request_tx_buffer_content(uint8_t *bits, struct timing_slot *slot)
@@ -141,7 +269,12 @@ int mac_request_tx_buffer_content(uint8_t *bits, struct timing_slot *slot)
 
     tms->channel_state_last_chg += 1; // increment last change counter
 
-    // channel house keeping
+    // Handle TMO BTS mode
+    if (operating_mode == TETRA_INFRA_TMO) {
+        return mac_request_tx_buffer_content_tmo(bits, slot);
+    }
+
+    // channel house keeping for DMO mode
     switch (tms->channel_state) {
         case DM_CHANNEL_S_DMREP_IDLE_UNKNOWN:
             printf("[DM_CHANNEL_S_DMREP_IDLE_UNKNOWN] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);

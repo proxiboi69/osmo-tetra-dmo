@@ -86,6 +86,16 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 
 	mac_hamtetra_init();
 
+	// Initialize mode-specific settings
+	if (mode == 2) {
+		// TMO BTS mode - initialize TMO-specific components
+		printf("Initializing TMO BTS PoC mode...\n");
+		mac_hamtetra_set_mode(TETRA_INFRA_TMO);
+	} else {
+		// DMO mode (repeater or monitor)
+		mac_hamtetra_set_mode(TETRA_INFRA_DMO);
+	}
+
 	if (strcmp(hw, "file") == 0) {
 		return -1; // not implemented
 		//io_code = &file_io_code;
@@ -114,6 +124,8 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 		io_conf->tx_on = 1;
 		if (mode == 0) // monitor only
 			io_conf->tx_on = 0;
+		else if (mode == 2) // TMO BTS mode
+			io_conf->tx_on = 1; // BTS needs to transmit
 
 		io_conf->buffer = 1024;
 		io_conf->tx_latency = 1024 * 10; // somewhat below 2 slots
@@ -243,6 +255,7 @@ int main(int argc, char *argv[])
 			"MODE options are:\n"
 			"   0         DMO monitor\n"
 			"   1         DMO repeater (default)\n"
+			"   2         TMO BTS PoC\n"
 			"FREQUENCY is TETRA signal center frequency in MHz.\n"
 			"For example: %s limemini 416.2375 0\n",
 			argv[0], argv[0]);
