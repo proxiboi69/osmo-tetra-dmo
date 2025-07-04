@@ -300,14 +300,82 @@ int build_tmo_sync_burst(uint8_t *bits, struct timing_slot *slot)
     return 510;
 }
 
+// Build DSCH (Dummy Synchronization Channel) burst for continuous transmission
+int build_tmo_dsch_burst(uint8_t *bits, struct timing_slot *slot)
+{
+    // DSCH uses normal continuous downlink burst format
+    // Carries dummy data to maintain continuous carrier
+    uint8_t bkn1_type2[27];  // Block 1 data (216 bits = 27 bytes for dummy)
+    uint8_t bkn2_type2[27];  // Block 2 data (216 bits = 27 bytes for dummy)
+    uint8_t bkn1_master[216*4];
+    uint8_t bkn2_master[216*4];
+    uint8_t bkn1_type3[216];
+    uint8_t bkn2_type3[216];
+    uint8_t bkn1_type4[216];
+    uint8_t bkn2_type4[216];
+    uint8_t bkn1_type5[216];
+    uint8_t bkn2_type5[216];
+    uint8_t bb_type5[30];
+    uint8_t burst[255*2];  // Full TETRA burst (510 symbols)
+    uint32_t bb_rm3014, bb_rm3014_be;
+    
+    // Create dummy data blocks (all zeros)
+    memset(bkn1_type2, 0, sizeof(bkn1_type2));
+    memset(bkn2_type2, 0, sizeof(bkn2_type2));
+    
+    // Convert packed bytes to bit arrays
+    uint8_t bkn1_bits[216], bkn2_bits[216];
+    osmo_pbit2ubit(bkn1_bits, bkn1_type2, 216);
+    osmo_pbit2ubit(bkn2_bits, bkn2_type2, 216);
+    
+    // Process block 1: Run rate 2/3 RCPC code
+    struct conv_enc_state *ces1 = calloc(1, sizeof(*ces1));
+    conv_enc_init(ces1);
+    conv_enc_input(ces1, bkn1_bits, 216, bkn1_master);
+    get_punctured_rate(TETRA_RCPC_PUNCT_2_3, bkn1_master, 216, bkn1_type3);
+    free(ces1);
+    
+    // Process block 2: Run rate 2/3 RCPC code
+    struct conv_enc_state *ces2 = calloc(1, sizeof(*ces2));
+    conv_enc_init(ces2);
+    conv_enc_input(ces2, bkn2_bits, 216, bkn2_master);
+    get_punctured_rate(TETRA_RCPC_PUNCT_2_3, bkn2_master, 216, bkn2_type3);
+    free(ces2);
+    
+    // Run block interleaving for both blocks
+    block_interleave(216, 11, bkn1_type3, bkn1_type4);
+    block_interleave(216, 11, bkn2_type3, bkn2_type4);
+    
+    // Run scrambling for both blocks
+    memcpy(bkn1_type5, bkn1_type4, 216);
+    memcpy(bkn2_type5, bkn2_type4, 216);
+    tetra_scramb_bits(SCRAMB_INIT, bkn1_type5, 216);
+    tetra_scramb_bits(SCRAMB_INIT, bkn2_type5, 216);
+    
+    // Create dummy AACH content
+    uint8_t aach_data[] = {0x00, 0x00};  // Dummy AACH data
+    bb_rm3014 = tetra_rm3014_compute(*(uint16_t *)aach_data);
+    bb_rm3014_be = htonl(bb_rm3014);
+    bb_rm3014_be <<= 2;
+    osmo_pbit2ubit(bb_type5, (uint8_t *) &bb_rm3014_be, 30);
+    
+    // Build normal continuous downlink burst (not sync burst)
+    build_norm_c_d_burst(burst, bkn1_type5, bb_type5, bkn2_type5, 0);
+    
+    // Copy full burst to output buffer
+    memcpy(bits, burst, 510);
+    
+    return 510;
+}
+
 int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
 {
     int len = -1;
     
     printf("[TMO BTS] TX slot: %2u %2u %2u - ", slot->tn, slot->fn, slot->mn);
     
-    // TMO BTS transmission logic
-    // For PoC, we'll transmit SYNC bursts on specific slots
+    // TMO BTS transmission logic with continuous transmission
+    // Implements DSCH for continuous carrier as required by TETRA
     
     // Transmit SYNC burst on slot 1 of frame 1 and 11 (BSCH slots)
     if (slot->tn == 1 && (slot->fn == 1 || slot->fn == 11)) {
@@ -315,16 +383,15 @@ int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
         len = build_tmo_sync_burst(bits, slot);
         bsch_counter++;
     }
-    // Transmit on other control slots as needed
+    // Other control slots (slot 1) - use DSCH for now
     else if (slot->tn == 1) {
-        printf("Control slot - ");
-        // For now, generate a simple burst or stay silent
-        len = -1; // No transmission
+        printf("Control/DSCH - ");
+        len = build_tmo_dsch_burst(bits, slot);
     }
+    // Traffic slots (slots 2, 3, 4) - use DSCH for continuous transmission
     else {
-        // Traffic slots - stay silent for PoC
-        printf("Traffic slot (silent) - ");
-        len = -1;
+        printf("Traffic/DSCH - ");
+        len = build_tmo_dsch_burst(bits, slot);
     }
     
     printf("burst len: %d\n", len);
