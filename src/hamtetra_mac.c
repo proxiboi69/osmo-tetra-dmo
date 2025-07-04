@@ -165,10 +165,70 @@ void mac_hamtetra_set_mode(enum tetra_infrastructure_mode mode)
     }
 }
 
+// Build proper SYNC-PDU content for TMO BTS
+int build_tmo_sync_pdu(uint8_t *sync_pdu_bits, struct timing_slot *slot)
+{
+    // SYNC-PDU structure (60 bits total)
+    // Based on ETSI EN 300 392-2 clause 18.4.2
+    memset(sync_pdu_bits, 0, 60);
+    
+    int bit_pos = 0;
+    
+    // System Code (4 bits) - indicates TMO system
+    sync_pdu_bits[bit_pos++] = 0; // TMO system
+    sync_pdu_bits[bit_pos++] = 0;
+    sync_pdu_bits[bit_pos++] = 0;
+    sync_pdu_bits[bit_pos++] = 1;
+    
+    // Colour Code (6 bits) - network color code
+    for (int i = 0; i < 6; i++) {
+        sync_pdu_bits[bit_pos++] = (1 >> (5-i)) & 1; // Color code = 1
+    }
+    
+    // Timeslot Number (2 bits)
+    sync_pdu_bits[bit_pos++] = (slot->tn >> 1) & 1;
+    sync_pdu_bits[bit_pos++] = slot->tn & 1;
+    
+    // Frame Number (5 bits)
+    for (int i = 0; i < 5; i++) {
+        sync_pdu_bits[bit_pos++] = (slot->fn >> (4-i)) & 1;
+    }
+    
+    // Multiframe Number (6 bits)
+    for (int i = 0; i < 6; i++) {
+        sync_pdu_bits[bit_pos++] = (slot->mn >> (5-i)) & 1;
+    }
+    
+    // MCC (10 bits) - Mobile Country Code (example: 262 for Germany)
+    uint16_t mcc = 262;
+    for (int i = 0; i < 10; i++) {
+        sync_pdu_bits[bit_pos++] = (mcc >> (9-i)) & 1;
+    }
+    
+    // MNC (14 bits) - Mobile Network Code (example: 42)
+    uint16_t mnc = 42;
+    for (int i = 0; i < 14; i++) {
+        sync_pdu_bits[bit_pos++] = (mnc >> (13-i)) & 1;
+    }
+    
+    // LA (14 bits) - Location Area (example: 1)
+    uint16_t la = 1;
+    for (int i = 0; i < 14; i++) {
+        sync_pdu_bits[bit_pos++] = (la >> (13-i)) & 1;
+    }
+    
+    // Reserved bits (fill remaining)
+    while (bit_pos < 60) {
+        sync_pdu_bits[bit_pos++] = 0;
+    }
+    
+    return 60;
+}
+
 // TMO BTS specific function to build SYNC and BSCH bursts
 int build_tmo_sync_burst(uint8_t *bits, struct timing_slot *slot)
 {
-    // Simple TMO BTS PoC implementation
+    // Enhanced TMO BTS implementation with proper SYNC-PDU
     // Based on conv_enc_test.c build_sb() function
     uint8_t sb_type2[80];
     uint8_t sb_master[80*4];
@@ -176,22 +236,29 @@ int build_tmo_sync_burst(uint8_t *bits, struct timing_slot *slot)
     uint8_t sb_type4[120];
     uint8_t sb_type5[120];
     uint8_t bb_type5[30];
-    uint8_t burst[255*2];
+    uint8_t burst[255*2];  // Full TETRA burst (510 symbols)
     uint16_t crc;
     uint8_t *cur;
     uint32_t bb_rm3014, bb_rm3014_be;
     
-    // Create basic SYNC PDU for TMO BTS
+    // Create proper SYNC-PDU for TMO BTS
     memset(sb_type2, 0, sizeof(sb_type2));
     cur = sb_type2;
     
-    // Simple SYNC PDU content - this is a PoC implementation
-    // In a full implementation, this would contain proper SYNC-PDU fields
-    uint8_t sync_pdu[] = {
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08  // Placeholder data
-    };
+    // Build proper SYNC-PDU content
+    uint8_t sync_pdu_bits[60];
+    build_tmo_sync_pdu(sync_pdu_bits, slot);
     
-    cur += osmo_pbit2ubit(sb_type2, sync_pdu, 60);
+    // Convert bits to packed bytes and add to type2
+    uint8_t sync_pdu_packed[8];
+    for (int i = 0; i < 8; i++) {
+        sync_pdu_packed[i] = 0;
+        for (int j = 0; j < 8 && (i*8+j) < 60; j++) {
+            sync_pdu_packed[i] |= (sync_pdu_bits[i*8+j] << (7-j));
+        }
+    }
+    
+    cur += osmo_pbit2ubit(sb_type2, sync_pdu_packed, 60);
     
     crc = ~crc16_ccitt_bits(sb_type2, 60);
     crc = swap16(crc);
@@ -224,11 +291,13 @@ int build_tmo_sync_burst(uint8_t *bits, struct timing_slot *slot)
     // Build the actual burst
     build_sync_c_d_burst(burst, sb_type5, bb_type5, sb_type5); // Reuse sb_type5 for SI
     
-    // Copy to output buffer (first 255 bits for now)
-    memcpy(bits, burst, 255);
+    // TETRA burst structure requires 510 symbols total
+    // The burst array is already sized for 510 symbols (255*2)
+    // Copy full burst to output buffer
+    memcpy(bits, burst, 510);
     
-    printf("[TMO BTS] Generated SYNC burst for slot %u/%u\n", slot->fn, slot->tn);
-    return 255;
+    printf("[TMO BTS] Generated SYNC burst for slot %u/%u (510 symbols)\n", slot->fn, slot->tn);
+    return 510;
 }
 
 int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
