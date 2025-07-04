@@ -133,6 +133,7 @@ int presence_signal_counter = 0;
 static enum tetra_infrastructure_mode operating_mode = TETRA_INFRA_DMO; // Default to DMO
 static uint32_t bsch_counter = 0;
 static uint32_t sync_burst_counter = 0;
+static uint32_t bcch_counter = 0;
 
 #define swap16(x) ((x)<<8)|((x)>>8)
 
@@ -151,6 +152,7 @@ void mac_hamtetra_init()
     // Initialize TMO-specific counters
     bsch_counter = 0;
     sync_burst_counter = 0;
+    bcch_counter = 0;
 }
 
 void mac_hamtetra_set_mode(enum tetra_infrastructure_mode mode)
@@ -223,6 +225,146 @@ int build_tmo_sync_pdu(uint8_t *sync_pdu_bits, struct timing_slot *slot)
     }
     
     return 60;
+}
+
+// Build SYSINFO-PDU content for BCCH
+int build_tmo_sysinfo_pdu(uint8_t *sysinfo_bits, struct timing_slot *slot, uint8_t sysinfo_type)
+{
+    // SYSINFO-PDU structure based on ETSI EN 300 392-2
+    memset(sysinfo_bits, 0, 216);  // 216 bits for block data
+    
+    int bit_pos = 0;
+    
+    // PDU Type (4 bits) - SYSINFO-PDU
+    sysinfo_bits[bit_pos++] = 1;  // SYSINFO-PDU type
+    sysinfo_bits[bit_pos++] = 1;
+    sysinfo_bits[bit_pos++] = 0;
+    sysinfo_bits[bit_pos++] = 0;
+    
+    // SYSINFO Type (4 bits)
+    for (int i = 0; i < 4; i++) {
+        sysinfo_bits[bit_pos++] = (sysinfo_type >> (3-i)) & 1;
+    }
+    
+    switch (sysinfo_type) {
+        case 1: // Main system information
+            // MCC (10 bits) - Mobile Country Code
+            uint16_t mcc = 262;  // Germany
+            for (int i = 0; i < 10; i++) {
+                sysinfo_bits[bit_pos++] = (mcc >> (9-i)) & 1;
+            }
+            
+            // MNC (14 bits) - Mobile Network Code
+            uint16_t mnc = 42;
+            for (int i = 0; i < 14; i++) {
+                sysinfo_bits[bit_pos++] = (mnc >> (13-i)) & 1;
+            }
+            
+            // Colour Code (6 bits)
+            for (int i = 0; i < 6; i++) {
+                sysinfo_bits[bit_pos++] = (1 >> (5-i)) & 1;  // Color code = 1
+            }
+            
+            // Timeslot Number (2 bits)
+            sysinfo_bits[bit_pos++] = (slot->tn >> 1) & 1;
+            sysinfo_bits[bit_pos++] = slot->tn & 1;
+            
+            // Frame Number (5 bits)
+            for (int i = 0; i < 5; i++) {
+                sysinfo_bits[bit_pos++] = (slot->fn >> (4-i)) & 1;
+            }
+            
+            // Cell Reselection Parameters (16 bits)
+            uint16_t cell_resel = 0x1234;  // Example values
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (cell_resel >> (15-i)) & 1;
+            }
+            
+            // Access Parameter (8 bits)
+            uint8_t access_param = 0x0F;  // Allow all access classes
+            for (int i = 0; i < 8; i++) {
+                sysinfo_bits[bit_pos++] = (access_param >> (7-i)) & 1;
+            }
+            
+            // Radio Parameters (16 bits)
+            uint16_t radio_param = 0x5678;  // Example radio parameters
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (radio_param >> (15-i)) & 1;
+            }
+            break;
+            
+        case 2: // Neighbor cell information
+            // Number of neighbor cells (4 bits)
+            uint8_t num_neighbors = 2;  // Example: 2 neighbor cells
+            for (int i = 0; i < 4; i++) {
+                sysinfo_bits[bit_pos++] = (num_neighbors >> (3-i)) & 1;
+            }
+            
+            // Neighbor cell 1 (32 bits total)
+            uint16_t neighbor1_freq = 430100;  // 430.1 MHz in kHz
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (neighbor1_freq >> (15-i)) & 1;
+            }
+            uint16_t neighbor1_id = 0x0001;
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (neighbor1_id >> (15-i)) & 1;
+            }
+            
+            // Neighbor cell 2 (32 bits total)
+            uint16_t neighbor2_freq = 430300;  // 430.3 MHz in kHz
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (neighbor2_freq >> (15-i)) & 1;
+            }
+            uint16_t neighbor2_id = 0x0002;
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (neighbor2_id >> (15-i)) & 1;
+            }
+            break;
+            
+        case 3: // Access and timing parameters
+            // Registration Timer (8 bits) - minutes
+            uint8_t reg_timer = 30;  // 30 minutes
+            for (int i = 0; i < 8; i++) {
+                sysinfo_bits[bit_pos++] = (reg_timer >> (7-i)) & 1;
+            }
+            
+            // Common or Individual Channel (1 bit)
+            sysinfo_bits[bit_pos++] = 1;  // Common channel
+            
+            // Access Rights (8 bits)
+            uint8_t access_rights = 0xFF;  // All rights enabled
+            for (int i = 0; i < 8; i++) {
+                sysinfo_bits[bit_pos++] = (access_rights >> (7-i)) & 1;
+            }
+            
+            // Subscriber Class (4 bits)
+            uint8_t sub_class = 0x0F;  // All subscriber classes
+            for (int i = 0; i < 4; i++) {
+                sysinfo_bits[bit_pos++] = (sub_class >> (3-i)) & 1;
+            }
+            
+            // BS Service Details (16 bits)
+            uint16_t bs_service = 0x9ABC;  // Service capabilities
+            for (int i = 0; i < 16; i++) {
+                sysinfo_bits[bit_pos++] = (bs_service >> (15-i)) & 1;
+            }
+            break;
+            
+        default:
+            // Fill with pattern for unknown types
+            for (int i = bit_pos; i < 200; i++) {
+                sysinfo_bits[i] = (i % 2);  // Alternating pattern
+            }
+            bit_pos = 200;
+            break;
+    }
+    
+    // Fill remaining bits with zeros or padding
+    while (bit_pos < 200) {  // Leave room for CRC
+        sysinfo_bits[bit_pos++] = 0;
+    }
+    
+    return bit_pos;
 }
 
 // TMO BTS specific function to build SYNC and BSCH bursts
@@ -368,14 +510,107 @@ int build_tmo_dsch_burst(uint8_t *bits, struct timing_slot *slot)
     return 510;
 }
 
+// Build BCCH (Broadcast Control Channel) burst for system information
+int build_tmo_bcch_burst(uint8_t *bits, struct timing_slot *slot, uint8_t sysinfo_type)
+{
+    // BCCH uses normal continuous downlink burst format
+    // Carries SYSINFO-PDU content for network information
+    uint8_t sysinfo_bits[216];
+    uint8_t sysinfo_type2[27];  // Packed bytes
+    uint8_t bkn2_type2[27];     // Block 2 (can be dummy or additional info)
+    uint8_t sysinfo_master[216*4];
+    uint8_t bkn2_master[216*4];
+    uint8_t sysinfo_type3[216];
+    uint8_t bkn2_type3[216];
+    uint8_t sysinfo_type4[216];
+    uint8_t bkn2_type4[216];
+    uint8_t sysinfo_type5[216];
+    uint8_t bkn2_type5[216];
+    uint8_t bb_type5[30];
+    uint8_t burst[255*2];  // Full TETRA burst (510 symbols)
+    uint16_t crc;
+    uint32_t bb_rm3014, bb_rm3014_be;
+    
+    // Build SYSINFO-PDU content
+    int sysinfo_len = build_tmo_sysinfo_pdu(sysinfo_bits, slot, sysinfo_type);
+    
+    // Add CRC to SYSINFO data
+    crc = ~crc16_ccitt_bits(sysinfo_bits, sysinfo_len);
+    crc = swap16(crc);
+    
+    // Pack the SYSINFO bits into bytes for processing
+    memset(sysinfo_type2, 0, sizeof(sysinfo_type2));
+    for (int i = 0; i < (sysinfo_len + 16); i += 8) {  // +16 for CRC
+        uint8_t byte_val = 0;
+        for (int j = 0; j < 8 && (i + j) < sysinfo_len; j++) {
+            byte_val |= (sysinfo_bits[i + j] << (7 - j));
+        }
+        if (i < 16) { // Add CRC bits
+            for (int j = 0; j < 8 && (i + j) < 16; j++) {
+                byte_val |= (((crc >> (15 - (i + j))) & 1) << (7 - j));
+            }
+        }
+        if ((i / 8) < sizeof(sysinfo_type2)) {
+            sysinfo_type2[i / 8] = byte_val;
+        }
+    }
+    
+    // Create dummy data for block 2
+    memset(bkn2_type2, 0, sizeof(bkn2_type2));
+    
+    // Convert packed bytes to bit arrays
+    uint8_t sysinfo_unpacked[216], bkn2_bits[216];
+    osmo_pbit2ubit(sysinfo_unpacked, sysinfo_type2, 216);
+    osmo_pbit2ubit(bkn2_bits, bkn2_type2, 216);
+    
+    // Process SYSINFO block: Run rate 2/3 RCPC code
+    struct conv_enc_state *ces1 = calloc(1, sizeof(*ces1));
+    conv_enc_init(ces1);
+    conv_enc_input(ces1, sysinfo_unpacked, 216, sysinfo_master);
+    get_punctured_rate(TETRA_RCPC_PUNCT_2_3, sysinfo_master, 216, sysinfo_type3);
+    free(ces1);
+    
+    // Process block 2: Run rate 2/3 RCPC code
+    struct conv_enc_state *ces2 = calloc(1, sizeof(*ces2));
+    conv_enc_init(ces2);
+    conv_enc_input(ces2, bkn2_bits, 216, bkn2_master);
+    get_punctured_rate(TETRA_RCPC_PUNCT_2_3, bkn2_master, 216, bkn2_type3);
+    free(ces2);
+    
+    // Run block interleaving for both blocks
+    block_interleave(216, 11, sysinfo_type3, sysinfo_type4);
+    block_interleave(216, 11, bkn2_type3, bkn2_type4);
+    
+    // Run scrambling for both blocks
+    memcpy(sysinfo_type5, sysinfo_type4, 216);
+    memcpy(bkn2_type5, bkn2_type4, 216);
+    tetra_scramb_bits(SCRAMB_INIT, sysinfo_type5, 216);
+    tetra_scramb_bits(SCRAMB_INIT, bkn2_type5, 216);
+    
+    // Create AACH content for BCCH
+    uint8_t aach_data[] = {0x01, 0x00};  // BCCH indicator in AACH
+    bb_rm3014 = tetra_rm3014_compute(*(uint16_t *)aach_data);
+    bb_rm3014_be = htonl(bb_rm3014);
+    bb_rm3014_be <<= 2;
+    osmo_pbit2ubit(bb_type5, (uint8_t *) &bb_rm3014_be, 30);
+    
+    // Build normal continuous downlink burst with SYSINFO content
+    build_norm_c_d_burst(burst, sysinfo_type5, bb_type5, bkn2_type5, 0);
+    
+    // Copy full burst to output buffer
+    memcpy(bits, burst, 510);
+    
+    return 510;
+}
+
 int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
 {
     int len = -1;
     
     printf("[TMO BTS] TX slot: %2u %2u %2u - ", slot->tn, slot->fn, slot->mn);
     
-    // TMO BTS transmission logic with continuous transmission
-    // Implements DSCH for continuous carrier as required by TETRA
+    // TMO BTS transmission logic with BCCH and continuous transmission
+    // Implements BCCH system information and DSCH for continuous carrier
     
     // Transmit SYNC burst on slot 1 of frame 1 and 11 (BSCH slots)
     if (slot->tn == 1 && (slot->fn == 1 || slot->fn == 11)) {
@@ -383,10 +618,33 @@ int mac_request_tx_buffer_content_tmo(uint8_t *bits, struct timing_slot *slot)
         len = build_tmo_sync_burst(bits, slot);
         bsch_counter++;
     }
-    // Other control slots (slot 1) - use DSCH for now
+    // BCCH transmissions on specific control slots (slot 1)
     else if (slot->tn == 1) {
-        printf("Control/DSCH - ");
-        len = build_tmo_dsch_burst(bits, slot);
+        // BCCH scheduling: transmit different SYSINFO types on different frames
+        // Frame 3: SYSINFO type 1 (main system info)
+        // Frame 6: SYSINFO type 2 (neighbor cells)
+        // Frame 9: SYSINFO type 3 (access parameters)
+        // Other frames: DSCH
+        
+        if (slot->fn == 3) {
+            printf("BCCH/SYSINFO-1 - ");
+            len = build_tmo_bcch_burst(bits, slot, 1);  // Main system info
+            bcch_counter++;
+        }
+        else if (slot->fn == 6) {
+            printf("BCCH/SYSINFO-2 - ");
+            len = build_tmo_bcch_burst(bits, slot, 2);  // Neighbor cells
+            bcch_counter++;
+        }
+        else if (slot->fn == 9) {
+            printf("BCCH/SYSINFO-3 - ");
+            len = build_tmo_bcch_burst(bits, slot, 3);  // Access parameters
+            bcch_counter++;
+        }
+        else {
+            printf("Control/DSCH - ");
+            len = build_tmo_dsch_burst(bits, slot);
+        }
     }
     // Traffic slots (slots 2, 3, 4) - use DSCH for continuous transmission
     else {
