@@ -1,11 +1,8 @@
 #ifndef HAMTETRA_TMO_MAC_H
 #define HAMTETRA_TMO_MAC_H
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include "hamtetra_timing.h"
-#include "tetra_common.h"
 
 void tmo_mac_init(void);
 
