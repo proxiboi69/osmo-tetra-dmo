@@ -5,7 +5,7 @@
 #include <osmocom/core/bitvec.h>
 #include <osmocom/core/talloc.h>
 
-#include "hamtetra_config.h"
+#include "hamtetra_tmo_config.h"
 #include "hamtetra_mac.h"
 #include "hamtetra_tmo_mac.h"
 #include "lower_mac/crc_simple.h"
@@ -51,8 +51,8 @@ int build_tmo_sync_pdu(uint8_t *sync_pdu_bits, struct timing_slot *slot)
     // Bits 0-3: System Code (4 bits) - indicates TMO system
     bitvec_set_uint(&bv, 0, 4); // 0 = TMO (different from DMO which uses 13)
 
-    // Bits 4-9: Colour Code (6 bits) - network color code
-    bitvec_set_uint(&bv, 1, 6);
+    // Bits 4-9: Colour Code (6 bits)
+    bitvec_set_uint(&bv, TMO_CC, 6);
 
     // Bits 10-11: Timeslot Number (2 bits)
     bitvec_set_uint(&bv, slot->tn, 2);
@@ -67,15 +67,15 @@ int build_tmo_sync_pdu(uint8_t *sync_pdu_bits, struct timing_slot *slot)
     bitvec_set_uint(&bv, 0, 8);
 
     // Bits 31-40: MCC (10 bits) - decoder expects this here!
-    bitvec_set_uint(&bv, REP_MCC, 10);
+    bitvec_set_uint(&bv, TMO_MCC, 10);
 
     // Bits 41-54: MNC (14 bits) - decoder expects this here!
-    bitvec_set_uint(&bv, REP_MNC, 14);
+    bitvec_set_uint(&bv, TMO_MNC, 14);
 
     // Remaining bits (55-59): Reserved (5 bits)
     bitvec_set_uint(&bv, 0, 5);
 
-    printf("[TMO SYNC] Built SYNC PDU with MCC=%u at bits 31-40, MNC=%u at bits 41-54\n", REP_MCC, REP_MNC);
+    printf("[TMO SYNC] Built SYNC PDU with CC=%u at bits 4-9, MCC=%u at bits 31-40, MNC=%u at bits 41-54\n", TMO_CC, TMO_MCC, TMO_MNC);
 
     // Convert packed bits to unpacked bit array
     osmo_pbit2ubit(sync_pdu_bits, pdu_sync, 60);
@@ -178,20 +178,14 @@ int build_tmo_sysinfo_pdu(uint8_t *sysinfo_bits, struct timing_slot *slot, uint8
     switch (sysinfo_type)
     {
     case 1: // Main system information
-        // TMO SYSINFO uses separate MCC/MNC fields, not combined MNI
-        uint16_t mcc = REP_MCC;
-        uint16_t mnc = REP_MNC;
-
-        printf("[TMO SYSINFO] Encoding MCC=%u, MNC=%u\n", mcc, mnc);
-
         // MCC field (10 bits)
-        bitvec_set_uint(&bv, mcc, 10);
+        bitvec_set_uint(&bv, TMO_MCC, 10);
 
         // MNC field (14 bits)
-        bitvec_set_uint(&bv, mnc, 14);
+        bitvec_set_uint(&bv, TMO_MNC, 14);
 
         // Colour Code (6 bits)
-        bitvec_set_uint(&bv, 1, 6); // Color code = 1
+        bitvec_set_uint(&bv, TMO_CC, 6);
 
         // Timeslot Number (2 bits)
         bitvec_set_uint(&bv, slot->tn, 2);
