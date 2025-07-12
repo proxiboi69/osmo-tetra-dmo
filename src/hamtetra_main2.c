@@ -256,7 +256,32 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 	struct burst_dpsk_receiver_conf *rx_conf = burst_dpsk_receiver_code.init_conf();
 	rx_conf->samplerate = samplerate;
 	rx_conf->centerfreq = offset_freq;
-	rx_conf->syncpos = 143; // To get complete slots for DMO
+
+	if (operating_mode == TETRA_INFRA_TMO)
+	{
+		fprintf(stderr, "Configuring receiver for TMO Uplink Bursts\n");
+		// ETSI EN 300 392-2, Annex B.1.3: Training sequence bits for uplink (TS3, 'x_bits')
+		// This is a 30-bit sequence.
+		rx_conf->syncword1 = 0b000101110001001101011101100010;
+		rx_conf->synclen = 30;
+
+		// The TS ends at symbol 36 in an uplink burst.
+		// syncpos = (42 preamble bits + 30 TS bits) / 2 bits_per_symbol = 36
+		rx_conf->syncpos = 36;
+
+		// Uplink burst is 206 bits long = 103 symbols.
+		rx_conf->framelen = 103;
+
+		// Disable the other sync words to avoid potential false positives on noise.
+		rx_conf->syncword2 = 0;
+		rx_conf->syncword3 = 0;
+	}
+	else
+	{
+		// This is the original DMO configuration. Leave it for DMO mode.
+		rx_conf->syncpos = 143; // To get complete slots for DMO
+	}
+
 	void *rx_arg = burst_dpsk_receiver_code.init(rx_conf);
 
 	if (rx_arg == NULL)
