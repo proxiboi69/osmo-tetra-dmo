@@ -19,6 +19,8 @@
 #include "phy/tetra_burst.h"
 #include "phy/tetra_burst_sync.h"
 
+extern enum tetra_infrastructure_mode operating_mode;
+
 void *tetra_tall_ctx;
 
 struct tetra_mac_state *tms;
@@ -137,9 +139,6 @@ void dpc_sap_udata_req(struct tetra_mac_state *tms_req)
 unsigned int multiframe_counter = 0;
 uint8_t multiframes_since_last_presence = 0;
 int presence_signal_counter = 0;
-
-// Infrastructure mode selection
-static enum tetra_infrastructure_mode operating_mode = TETRA_INFRA_DMO; // Default to DMO
 
 #define swap16(x) ((x) << 8) | ((x) >> 8)
 

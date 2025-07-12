@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <string.h>
 
+enum tetra_infrastructure_mode operating_mode;
+
 struct timing_state *timing1;
 struct slotter_state *slotter1;
 static const struct signal_io_code *io_code;
@@ -66,7 +68,6 @@ static int dummy_tick(void *arg, timestamp_t timenow)
 }
 
 const struct rx_output_code hamtetra_rx_output_code = {"HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_rx_output_frame, dummy_tick};
-
 const struct tx_input_code hamtetra_tx_input_code = {"HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_tx_input_frame, dummy_tick};
 
 static int hamtetra_init(const char *hw, double tetra_freq, int mode)
@@ -88,7 +89,15 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 	// Initialize mode-specific settings
 	if (mode == 2)
 	{
-		// TMO BTS mode - initialize TMO-specific components
+		operating_mode = TETRA_INFRA_TMO;
+	}
+	else
+	{
+		operating_mode = TETRA_INFRA_DMO;
+	}
+
+	if (operating_mode == TETRA_INFRA_TMO)
+	{
 		printf("Initializing TMO BTS PoC mode...\n");
 		mac_hamtetra_set_mode(TETRA_INFRA_TMO);
 	}
@@ -181,7 +190,6 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 			// Sample rate is about 1/4 times the default, so reduce buffer sizes to 1/4 too
 			io_conf->buffer /= 4;
 			io_conf->tx_latency /= 4;
-
 			samplerate = 150000.0;
 			offset_freq = 25000.0;
 		}
