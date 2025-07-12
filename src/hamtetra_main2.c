@@ -6,6 +6,7 @@
 #include "hamtetra_slotter.h"
 #include "hamtetra_timing.h"
 #include "hamtetra_tmo_mac.c"
+#include "hamtetra_tmo_ul_frontend.h"
 #include "modem/burst_dpsk_receiver.h"
 #include "modem/psk_transmitter.h"
 #include "signal-io/alsa_io.h"
@@ -282,12 +283,25 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 		rx_conf->syncpos = 143; // To get complete slots for DMO
 	}
 
-	void *rx_arg = burst_dpsk_receiver_code.init(rx_conf);
+	void *rx_arg = NULL;
+	const struct receiver_code *rx_code = NULL;
+
+	if (operating_mode == TETRA_INFRA_TMO)
+	{
+		fprintf(stderr, "Using DC Blocker Proxy Receiver for TMO mode.\n");
+		rx_code = &hamtetra_tmo_ul_frontend_code;
+	}
+	else
+	{
+		rx_code = &burst_dpsk_receiver_code;
+	}
+
+	rx_arg = rx_code->init(rx_conf);
 
 	if (rx_arg == NULL)
 		return -1;
 
-	burst_dpsk_receiver_code.set_callbacks(rx_arg, &hamtetra_rx_output_code, NULL);
+	rx_code->set_callbacks(rx_arg, &hamtetra_rx_output_code, NULL);
 
 	struct psk_transmitter_conf *tx_conf = psk_transmitter_code.init_conf();
 	tx_conf->samplerate = samplerate;
@@ -299,7 +313,7 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 
 	psk_transmitter_code.set_callbacks(tx_arg, &hamtetra_tx_input_code, NULL);
 
-	io_code->set_callbacks(io_arg, &burst_dpsk_receiver_code, rx_arg, &psk_transmitter_code, tx_arg);
+	io_code->set_callbacks(io_arg, rx_code, rx_arg, &psk_transmitter_code, tx_arg);
 	return 0;
 }
 
