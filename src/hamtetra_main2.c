@@ -224,8 +224,21 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 		}
 
 		io_conf->samplerate = samplerate;
-		io_conf->rx_centerfreq =
+
+		if (operating_mode == TETRA_INFRA_TMO)
+		{
+			// TMO Mode: FDD with 10 MHz split
+			printf("TMO mode. Configuring FDD: TX = %.4f MHz, RX = %.4f MHz\n",
+				   tetra_freq / 1e6, (tetra_freq - 10e6) / 1e6);
 			io_conf->tx_centerfreq = tetra_freq - offset_freq;
+			io_conf->rx_centerfreq = (tetra_freq - 10e6) - offset_freq;
+		}
+		else
+		{
+			// DMO Mode: TDD on a single frequency
+			io_conf->rx_centerfreq =
+				io_conf->tx_centerfreq = tetra_freq - offset_freq;
+		}
 
 		if (!io_conf->rx_on)
 		{

@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+extern enum tetra_infrastructure_mode operating_mode;
+
 /* DMO EN 300 396-2 - 9.4.3.3.2 Inter-slot frequency correction bits */
 static const uint8_t g_bits[40] = {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -42,17 +44,20 @@ int timing_rx_burst(struct timing_state *s, const uint8_t *bits, int len, uint64
 	 * if the training sequence happens to occur elsewhere in a burst,
 	 * the modem may deliver a mis-synchronized burst which will spoil
 	 * the calibration. This is not handled yet. */
-	const int64_t reject_margin = 2000000;
-	unsigned i;
-	for (i = 0; i < TIMING_TX_TIMES; i++)
+	if (operating_mode == TETRA_INFRA_DMO)
 	{
-		int64_t td = ts - s->tx_times[i];
-		if (td > -reject_margin && td < reject_margin)
+		const int64_t reject_margin = 2000000;
+		unsigned i;
+		for (i = 0; i < TIMING_TX_TIMES; i++)
 		{
-			if (s->use_calibration)
-				s->cal_time = -td;
-			printf("Rejected echo, timediff %10ld ns\n", (long)td);
-			return 0;
+			int64_t td = ts - s->tx_times[i];
+			if (td > -reject_margin && td < reject_margin)
+			{
+				if (s->use_calibration)
+					s->cal_time = -td;
+				printf("Rejected echo, timediff %10ld ns\n", (long)td);
+				return 0;
+			}
 		}
 	}
 
