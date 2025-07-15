@@ -1,4 +1,4 @@
-/*  Contains functionality to implement the business logic of DM MAC layer 
+/*  Contains functionality to implement the business logic of DM MAC layer
  *
  */
 
@@ -13,21 +13,22 @@ void *tetra_tall_ctx;
 struct tetra_mac_state *tms;
 struct tetra_tdma_time time;
 
-
 // timeslot struct
-struct timeslot {
-    uint8_t fn;             // frame 1-18
-    uint8_t tn;             // timeslot 1-4
-    uint8_t slave_fn;       // slave link frame nr
-    uint8_t slave_tn;       // slave link timeslot nr
-    int len;                // length of burst
-    uint8_t delayed;        // send n. multiframes later
-    uint8_t burst[512];     // burst bit-per-byte encoded 
+struct timeslot
+{
+    uint8_t fn;         // frame 1-18
+    uint8_t tn;         // timeslot 1-4
+    uint8_t slave_fn;   // slave link frame nr
+    uint8_t slave_tn;   // slave link timeslot nr
+    int len;            // length of burst
+    uint8_t delayed;    // send n. multiframes later
+    uint8_t burst[512]; // burst bit-per-byte encoded
 };
 
 // multiframe buffer, 18 frames with 4 timeslots = 72 timeslots
-struct multiframe {
-    struct timeslot tn[72]; 
+struct multiframe
+{
+    struct timeslot tn[72];
 };
 
 // global frame buffer to both threads
@@ -37,57 +38,62 @@ struct multiframe frame_buf_sent;
 // initialize the global framebuffer with timeslot numbers and timestamps
 void initialize_framebuffer(uint64_t base_time_ts)
 {
-    for (int i = 0; i<72; i++) {
+    for (int i = 0; i < 72; i++)
+    {
         struct timeslot *tn = &frame_buf_master.tn[i];
-        tn->tn = (i%4) + 1;
-        tn->fn = floor( (float)i/4 ) + 1;
-        tn->slave_tn = ((i-3)%4) + 1;
-        tn->slave_fn = floor( (float)(i-3)/4 ) + 1;
+        tn->tn = (i % 4) + 1;
+        tn->fn = floor((float)i / 4) + 1;
+        tn->slave_tn = ((i - 3) % 4) + 1;
+        tn->slave_fn = floor((float)(i - 3) / 4) + 1;
         tn->len = 0;
         tn->delayed = 0;
     }
 
-
-    for (int i = 0; i<72; i++) {
+    for (int i = 0; i < 72; i++)
+    {
         struct timeslot *tn = &frame_buf_sent.tn[i];
-        tn->tn = (i%4) + 1;
-        tn->fn = floor( (float)i/4 ) + 1;
-        tn->slave_tn = ((i-3)%4) + 1;
-        tn->slave_fn = floor( (float)(i-3)/4 ) + 1;
+        tn->tn = (i % 4) + 1;
+        tn->fn = floor((float)i / 4) + 1;
+        tn->slave_tn = ((i - 3) % 4) + 1;
+        tn->slave_fn = floor((float)(i - 3) / 4) + 1;
         tn->len = -1;
         tn->delayed = 0;
     }
-
 };
 
 // set next start timestamp of a timeslot for next round
-void reprime_timeslot(uint8_t slotnum) {
+void reprime_timeslot(uint8_t slotnum)
+{
     struct timeslot *tn = &frame_buf_master.tn[slotnum];
-    if (tn->delayed>0) {
+    if (tn->delayed > 0)
+    {
         tn->delayed--;
-    } else {
+    }
+    else
+    {
         tn->len = 0;
     }
-
 };
 
-void sent_buffer_set(struct timing_slot *slot, int len) {
-    uint8_t slotnum = (4*(slot->fn-1))+(slot->tn-1);
+void sent_buffer_set(struct timing_slot *slot, int len)
+{
+    uint8_t slotnum = (4 * (slot->fn - 1)) + (slot->tn - 1);
     frame_buf_sent.tn[slotnum].len = len;
 }
 
-int sent_buffer_get(struct timing_slot *slot) {
-    uint8_t slotnum = (4*(slot->fn-1))+(slot->tn-1);
+int sent_buffer_get(struct timing_slot *slot)
+{
+    uint8_t slotnum = (4 * (slot->fn - 1)) + (slot->tn - 1);
     return frame_buf_sent.tn[slotnum].len;
 }
-
 
 // lower mac wants to send a burst
 void dp_sap_udata_req(enum dp_sap_data_type type, const uint8_t *bits, unsigned int len, struct tetra_tdma_time tdma_time, struct tetra_mac_state *tms_req)
 {
-    uint8_t slotnum = (4*(tdma_time.fn-1))+(tdma_time.tn-1);
-    if (tdma_time.link == DM_LINK_SLAVE) {
-        slotnum = (slotnum+3) % 72;
+    uint8_t slotnum = (4 * (tdma_time.fn - 1)) + (tdma_time.tn - 1);
+    if (tdma_time.link == DM_LINK_SLAVE)
+    {
+        slotnum = (slotnum + 3) % 72;
     }
     printf("BURST OUT - scheduled to %d link buffer slot %d/%d (%d)\n", tdma_time.link, tdma_time.fn, tdma_time.tn, slotnum);
     struct timeslot *burst_slot;
@@ -95,26 +101,27 @@ void dp_sap_udata_req(enum dp_sap_data_type type, const uint8_t *bits, unsigned 
     memcpy(burst_slot->burst, bits, len);
     burst_slot->len = len;
 
-    if (tms_req->channel_state != tms->channel_state) {
+    if (tms_req->channel_state != tms->channel_state)
+    {
         tms->channel_state = tms_req->channel_state;
     }
-    if (tms_req->channel_state_last_chg != tms->channel_state_last_chg) {
+    if (tms_req->channel_state_last_chg != tms->channel_state_last_chg)
+    {
         tms->channel_state_last_chg = tms_req->channel_state_last_chg;
     }
-
 }
 
 void dpc_sap_udata_req(struct tetra_mac_state *tms_req)
 {
-    if (tms_req->channel_state != tms->channel_state) {
+    if (tms_req->channel_state != tms->channel_state)
+    {
         tms->channel_state = tms_req->channel_state;
     }
-    if (tms_req->channel_state_last_chg != tms->channel_state_last_chg) {
+    if (tms_req->channel_state_last_chg != tms->channel_state_last_chg)
+    {
         tms->channel_state_last_chg = tms_req->channel_state_last_chg;
     }
-
 }
-
 
 unsigned int multiframe_counter = 0;
 uint8_t multiframes_since_last_presence = 0;
@@ -123,104 +130,110 @@ int presence_signal_counter = 0;
 void mac_hamtetra_init()
 {
     // initialize MAC state structure
-	tms = talloc_zero(tetra_tall_ctx, struct tetra_mac_state);
-	tetra_mac_state_init(tms);
+    tms = talloc_zero(tetra_tall_ctx, struct tetra_mac_state);
+    tetra_mac_state_init(tms);
     tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_UNKNOWN;
 
     // initialiaze send buffer
     initialize_framebuffer(0);
 
-    presence_signal_counter = presence_signal_multiframe_count[DT254]*18*4;
-
+    presence_signal_counter = presence_signal_multiframe_count[DT254] * 18 * 4;
 }
 
 int mac_request_tx_buffer_content(uint8_t *bits, struct timing_slot *slot)
 {
-    uint8_t slotnum = (4*(slot->fn-1))+(slot->tn-1);
+    uint8_t slotnum = (4 * (slot->fn - 1)) + (slot->tn - 1);
     int len = -1;
 
     tms->channel_state_last_chg += 1; // increment last change counter
 
     // channel house keeping
-    switch (tms->channel_state) {
-        case DM_CHANNEL_S_DMREP_IDLE_UNKNOWN:
-            printf("[DM_CHANNEL_S_DMREP_IDLE_UNKNOWN] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
+    switch (tms->channel_state)
+    {
+    case DM_CHANNEL_S_DMREP_IDLE_UNKNOWN:
+        printf("[DM_CHANNEL_S_DMREP_IDLE_UNKNOWN] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
 
-            // change channel state to FREE if it has been idle for two multiframes since become UNKNOWN
-            if (tms->channel_state_last_chg > 143) {
-                tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_FREE;
-                tms->channel_state_last_chg = 0;
-                presence_signal_counter = presence_signal_multiframe_count[DT254]*18*4;
+        // change channel state to FREE if it has been idle for two multiframes since become UNKNOWN
+        if (tms->channel_state_last_chg > 143)
+        {
+            tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_FREE;
+            tms->channel_state_last_chg = 0;
+            presence_signal_counter = presence_signal_multiframe_count[DT254] * 18 * 4;
+        }
+        break;
+
+    case DM_CHANNEL_S_DMREP_IDLE_FREE:
+        printf("[DM_CHANNEL_S_DMREP_IDLE_FREE] last chg: %ld - TX slot: %2u %2u %2u ", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
+
+        // send DPRES-SYNC presence signal burst periodically on IDLE channel
+        if (--presence_signal_counter < (DN253 * 4))
+        {
+            printf(" DPRES IDLE - ");
+            uint8_t countdown = (presence_signal_counter - 1) / 4;
+            len = build_pdu_dpress_sync(slot->fn, slot->tn, DM_LINK_SLAVE, countdown, 0, bits);
+            if (presence_signal_counter == 0)
+            {
+                presence_signal_counter = presence_signal_multiframe_count[DT254] * 18 * 4;
             }
-            break;
+            sent_buffer_set(slot, len);
+            printf(" - burst len: %d\n", len);
+            return len;
+        }
+        break;
 
-        case DM_CHANNEL_S_DMREP_IDLE_FREE:
-            printf("[DM_CHANNEL_S_DMREP_IDLE_FREE] last chg: %ld - TX slot: %2u %2u %2u ", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
+    case DM_CHANNEL_S_DMREP_ACTIVE_OCCUPIED:
+        printf("[DM_CHANNEL_S_DMREP_ACTIVE_OCCUPIED] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
 
-            // send DPRES-SYNC presence signal burst periodically on IDLE channel
-            if (--presence_signal_counter < (DN253*4)){
-                printf(" DPRES IDLE - ");
-                uint8_t countdown = (presence_signal_counter-1) / 4;
-                len = build_pdu_dpress_sync(slot->fn, slot->tn, DM_LINK_SLAVE, countdown, 0, bits);
-                if (presence_signal_counter == 0) {
-                    presence_signal_counter = presence_signal_multiframe_count[DT254]*18*4;
-                }
+        // Send DM-REP presence signal in DSB in slot 3 at frames 1, 7 and 13 (master-link)
+        if (frame_buf_master.tn[slotnum].len < 1)
+        {
+            if ((slot->fn == 1 || slot->fn == 7 || slot->fn == 13) && slot->tn == 3)
+            {
+                printf(" DPRES OCC - ");
+                len = build_pdu_dpress_sync(slot->fn, slot->tn, DM_LINK_MASTER, 0, 1, bits);
                 sent_buffer_set(slot, len);
                 printf(" - burst len: %d\n", len);
                 return len;
             }
-            break;
+        }
+        break;
 
-        case DM_CHANNEL_S_DMREP_ACTIVE_OCCUPIED:
-            printf("[DM_CHANNEL_S_DMREP_ACTIVE_OCCUPIED] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
+    case DM_CHANNEL_S_DMREP_ACTIVE_RESERVED:
+        printf("[DM_CHANNEL_S_DMREP_ACTIVE_RESERVED] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
 
-            // Send DM-REP presence signal in DSB in slot 3 at frames 1, 7 and 13 (master-link)
-            if (frame_buf_master.tn[slotnum].len < 1) {
-                if ((slot->fn == 1 || slot->fn == 7 || slot->fn==13) && slot->tn == 3) {
-                    printf(" DPRES OCC - ");
-                    len = build_pdu_dpress_sync(slot->fn, slot->tn, DM_LINK_MASTER, 0, 1, bits);
-                    sent_buffer_set(slot, len);
-                    printf(" - burst len: %d\n", len);
-                    return len;
-                }
+        // Channel in reserved state over 5 multiframes without any bursts? Most probably an error so reset state back to IDLE
+        if (tms->channel_state_last_chg > 360)
+        {
+            tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_FREE;
+            tms->channel_state_last_chg = 0;
+            tms->cur_burst.is_traffic = 0;
+            tms->mode_of_operation = DM_MAC_MODE_SYNC_SIGNALLING;
+        }
+        break;
 
-            }
-            break;
-
-        case DM_CHANNEL_S_DMREP_ACTIVE_RESERVED:
-            printf("[DM_CHANNEL_S_DMREP_ACTIVE_RESERVED] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
-
-            // Channel in reserved state over 5 multiframes without any bursts? Most probably an error so reset state back to IDLE
-            if (tms->channel_state_last_chg>360) {
-                tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_FREE;
-                tms->channel_state_last_chg = 0;
-       			tms->cur_burst.is_traffic = 0;
-                tms->mode_of_operation = DM_MAC_MODE_SYNC_SIGNALLING;
-
-            }
-            break;
-
-
-        default:
-            printf("[STATE %d] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state, tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn); 
-            break;
-
+    default:
+        printf("[STATE %d] last chg: %ld - TX slot: %2u %2u %2u", tms->channel_state, tms->channel_state_last_chg, slot->tn, slot->fn, slot->mn);
+        break;
     }
 
     // buffer contains something to send
-    if (frame_buf_master.tn[slotnum].len > 0){
-        if (frame_buf_master.tn[slotnum].delayed > 0) {
+    if (frame_buf_master.tn[slotnum].len > 0)
+    {
+        if (frame_buf_master.tn[slotnum].delayed > 0)
+        {
             frame_buf_master.tn[slotnum].delayed--;
-        } else {
+        }
+        else
+        {
             struct timeslot *burst_slot;
             burst_slot = &frame_buf_master.tn[slotnum];
             memcpy(bits, burst_slot->burst, burst_slot->len);
             len = burst_slot->len;
             burst_slot->len = 0; // clear the sent
         }
-    } 
-    
-    sent_buffer_set(slot,len);
+    }
+
+    sent_buffer_set(slot, len);
 
     printf(" - burst len: %d\n", len);
     return len;
@@ -233,12 +246,13 @@ void mac_dp_sap_udata_ind_filter(enum dp_sap_data_type type, const uint8_t *bits
     struct timing_slot *slot = tms->slot;
     int flen = sent_buffer_get(slot);
     // if everything good, pass parameter through
-    if (flen < 0 || slot->changed==1) {
+    if (flen < 0 || slot->changed == 1)
+    {
         // printf("mac_dp_sap_udata_ind_filter says hello (%d/%d:%d)\n", slot->fn, slot->tn, flen);
         dp_sap_udata_ind(type, bits, len, priv);
-    } else {
-        printf("[MAC FILTER] burst filtered (%d/%d:%d)\n", slot->fn, slot->tn, flen);
-
     }
-
+    else
+    {
+        printf("[MAC FILTER] burst filtered (%d/%d:%d)\n", slot->fn, slot->tn, flen);
+    }
 }

@@ -5,14 +5,14 @@
  * to the DP-SAP interface in TETRA specifications.
  */
 
-#include "hamtetra_pdu_generator.h"
 #include "hamtetra_mac.h"
+#include "hamtetra_pdu_generator.h"
 #include "hamtetra_slotter.h"
 #include "phy/tetra_burst.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 #include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 extern struct tetra_phy_state t_phy_state;
 
@@ -26,25 +26,25 @@ struct slotter_state *slotter_init()
 	s->tms->infra_mode = TETRA_INFRA_DMO;
 
 	struct tetra_tdma_time init_time = {
-			.hn = 1,
-			.sn = 1,
-			.tn = 1,
-			.fn = 1,
-			.mn = 1,
-			.link = DM_LINK_MASTER
-		};
+		.hn = 1,
+		.sn = 1,
+		.tn = 1,
+		.fn = 1,
+		.mn = 1,
+		.link = DM_LINK_MASTER};
 	t_phy_state.time = init_time;
 
 	// initialize fragmentation slots
-	memset((void *)&fragslots,0,sizeof(struct fragslot)*FRAGSLOT_NR_SLOTS);
-	char desc[]="slot \0";
-	for (int k=0;k<FRAGSLOT_NR_SLOTS;k++) {
-		desc[4]='0'+k;
-		fragslots[k].msgb=msgb_alloc(8192, desc);
+	memset((void *)&fragslots, 0, sizeof(struct fragslot) * FRAGSLOT_NR_SLOTS);
+	char desc[] = "slot \0";
+	for (int k = 0; k < FRAGSLOT_NR_SLOTS; k++)
+	{
+		desc[4] = '0' + k;
+		fragslots[k].msgb = msgb_alloc(8192, desc);
 		msgb_reset(fragslots[k].msgb);
 	}
 
-	s->tms->channel_state=DM_CHANNEL_S_DMREP_IDLE_UNKNOWN;
+	s->tms->channel_state = DM_CHANNEL_S_DMREP_IDLE_UNKNOWN;
 
 	return s;
 }
@@ -56,15 +56,15 @@ int slotter_rx_burst(struct slotter_state *s, const uint8_t *bits, int len, stru
 	// TODO: add different operating modes here
 
 	/* Just a test: if no bursts have been received in a while,
-	 * synchronize timing to the first received burst. 
-	if (slot->time - s->prev_burst_time > 1000000000UL) {
+	 * synchronize timing to the first received burst.
+	if (slot->time - s->prev_burst_time > 1000000000UL)
+	{
 		struct timing_slot sync_slot = {
 			.time = slot->time,
 			.diff = 0, // not used
 			.tn = 1,
 			.fn = 1,
-			.mn = 1
-		};
+			.mn = 1};
 		timing_resync(s->timing, &sync_slot);
 	} */
 
@@ -81,32 +81,37 @@ int slotter_rx_burst(struct slotter_state *s, const uint8_t *bits, int len, stru
 	tetra_burst_dmo_rx_cb2(bits, len, ts, s->tms);
 
 	// if lower mac resyncronizes the frame timings based on SCH/S burst
-	if (slot->changed>0) {
+	if (slot->changed > 0)
+	{
 		struct timing_slot sync_slot = {
 			.time = slot->time,
 			.diff = 0, // not used
 			.tn = slot->tn,
 			.fn = slot->fn,
-			.mn = slot->mn
-		};
+			.mn = slot->mn};
 		timing_resync(s->timing, &sync_slot);
-
 	}
 
 	s->prev_burst_time = slot->time;
 	return 0;
 }
 
-
 int slotter_tx_burst(struct slotter_state *s, uint8_t *bits, int maxlen, struct timing_slot *slot)
 {
 	int len = -1;
-	//printf("TX slot: %2u %2u %2u\n", slot->tn, slot->fn, slot->mn);
+	// printf("TX slot: %2u %2u %2u\n", slot->tn, slot->fn, slot->mn);
 
 	// TODO: add different operating modes here
 
-	// trying to glue it to tetra-dmo-rep here
-	len = mac_request_tx_buffer_content(bits, slot);
+	if (operating_mode == TETRA_INFRA_TMO)
+	{
+		len = mac_request_tx_buffer_content_tmo(bits, slot);
+	}
+	else
+	{
+		// trying to glue it to tetra-dmo-rep here
+		len = mac_request_tx_buffer_content(bits, slot);
+	}
 
 	assert(len <= maxlen);
 	return len;

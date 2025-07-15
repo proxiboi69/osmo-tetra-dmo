@@ -10,7 +10,8 @@
 
 struct slotter_state;
 
-struct timing_state {
+struct timing_state
+{
 	struct slotter_state *slotter;
 
 	// Parameter: length of a slot
@@ -27,7 +28,7 @@ struct timing_state {
 	unsigned char prev_dmo; // Flag: a DMO burst was transmitted in the previous slot
 
 	unsigned char use_interslot_bits; // Configuration flag
-	unsigned char use_calibration;    // Configuration flag
+	unsigned char use_calibration;	  // Configuration flag
 
 	/* A few previous transmit timestamps, used to reject
 	 * own transmissions being received */
@@ -35,18 +36,19 @@ struct timing_state {
 	uint64_t tx_times[TIMING_TX_TIMES];
 };
 
-struct timing_slot {
-	uint64_t time;    // Timestamp
+struct timing_slot
+{
+	uint64_t time; // Timestamp
 
 	/* For RX: Time difference from expected timestamp
 	 * For TX: Not used for now */
-	int64_t  diff;
+	int64_t diff;
 
 	unsigned char tn; // Timeslot Number (1 to 4)
 	unsigned char fn; // TDMA Frame Number (1 to 18)
 	unsigned char mn; // TDMA Multiframe Number (1 to 60)
 	unsigned char hn; // TDMA Hyperframe Number?
-	int changed;      // timing slot modified during the process?
+	int changed;	  // timing slot modified during the process?
 };
 
 /* Allocate and initialize a timing state.

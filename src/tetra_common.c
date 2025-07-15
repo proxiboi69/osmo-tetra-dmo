@@ -18,12 +18,11 @@
  *
  */
 
-
 #include <stdint.h>
 #include <string.h>
 
-#include <osmocom/core/utils.h>
 #include <osmocom/core/bits.h>
+#include <osmocom/core/utils.h>
 
 #include "tetra_common.h"
 #include "tetra_prim.h"
@@ -46,80 +45,78 @@ static inline uint32_t tetra_band_base_hz(uint8_t band)
 }
 
 static const int16_t tetra_carrier_offset[4] = {
-	[0] =	     0,
-	[1] =	  6250,
-	[2] =	 -6250,
-	[3] =	+12500,
+	[0] = 0,
+	[1] = 6250,
+	[2] = -6250,
+	[3] = +12500,
 };
 
 uint32_t tetra_dl_carrier_hz(uint8_t band, uint16_t carrier, uint8_t offset)
 {
 	uint32_t freq = tetra_band_base_hz(band);
 	freq += carrier * 25000;
-	freq += tetra_carrier_offset[offset&3];
+	freq += tetra_carrier_offset[offset & 3];
 	return freq;
 }
 
 /* TS 100 392-15, Table 2 */
-static const int16_t tetra_duplex_spacing[8][16] = { /* values are in kHz */
-	[0] = { -1, 1600, 10000, 10000, 10000, 10000, 10000, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
-	[1] = { -1, 4500, -1, 36000, 7000, -1, -1, -1, 45000, 45000, -1, -1, -1, -1, -1, -1 },
-	[2] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-	[3] = { -1, -1, -1, 8000, 8000, -1, -1, -1, 18000, 18000, -1, -1, -1, -1, -1, -1 },
-	[4] = { -1, -1, -1, 18000, 5000, -1, 30000, 30000, -1, 39000, -1, -1, -1, -1, -1, -1 },
-	[5] = { -1, -1, -1, -1, 9500, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
-	[6] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
-	[7] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 },
+static const int16_t tetra_duplex_spacing[8][16] = {
+	/* values are in kHz */
+	[0] = {-1, 1600, 10000, 10000, 10000, 10000, 10000, -1, -1, -1, -1, -1, -1, -1, -1, -1},
+	[1] = {-1, 4500, -1, 36000, 7000, -1, -1, -1, 45000, 45000, -1, -1, -1, -1, -1, -1},
+	[2] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	[3] = {-1, -1, -1, 8000, 8000, -1, -1, -1, 18000, 18000, -1, -1, -1, -1, -1, -1},
+	[4] = {-1, -1, -1, 18000, 5000, -1, 30000, 30000, -1, 39000, -1, -1, -1, -1, -1, -1},
+	[5] = {-1, -1, -1, -1, 9500, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
+	[6] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
+	[7] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 };
 
-uint32_t tetra_ul_carrier_hz(uint8_t band, uint16_t carrier, uint8_t offset,
-			     uint8_t duplex, uint8_t reverse)
+uint32_t tetra_ul_carrier_hz(uint8_t band, uint16_t carrier, uint8_t offset, uint8_t duplex, uint8_t reverse)
 {
 	uint32_t freq = tetra_dl_carrier_hz(band, carrier, offset);
 
 	uint32_t duplex_spacing = tetra_duplex_spacing[duplex & 7][band & 15];
 
 	if (duplex_spacing < 0) /* reserved for future standardization */
-	    return 0;
+		return 0;
 
 	duplex_spacing *= 1000; // make Hz
 
 	if (reverse)
-	    freq += duplex_spacing;
+		freq += duplex_spacing;
 	else
-	    freq -= duplex_spacing;
+		freq -= duplex_spacing;
 
 	return freq;
 }
 
 static const struct value_string tetra_sap_names[] = {
-	{ TETRA_SAP_TP,		"TP-SAP" },
-	{ TETRA_SAP_TMV,	"TMV-SAP" },
-	{ TETRA_SAP_TMA,	"TMA-SAP" },
-	{ TETRA_SAP_TMB,	"TMB-SAP" },
-	{ TETRA_SAP_TMD,	"TMD-SAP" },
-	{ TETRA_SAP_DP,		"DP-SAP"},
-	{ TETRA_SAP_DMV,	"DMV-SAP"},
-	{ 0, NULL }
-};
+	{TETRA_SAP_TP, "TP-SAP"},
+	{TETRA_SAP_TMV, "TMV-SAP"},
+	{TETRA_SAP_TMA, "TMA-SAP"},
+	{TETRA_SAP_TMB, "TMB-SAP"},
+	{TETRA_SAP_TMD, "TMD-SAP"},
+	{TETRA_SAP_DP, "DP-SAP"},
+	{TETRA_SAP_DMV, "DMV-SAP"},
+	{0, NULL}};
 
 static const struct value_string tetra_lchan_names[] = {
-	{ TETRA_LC_UNKNOWN,	"UNKNOWN" },
-	{ TETRA_LC_SCH_F,	"SCH/F" },
-	{ TETRA_LC_SCH_H,	"SCH/H" },
-	{ TETRA_LC_SCH_S,	"SCH/S" },
-	{ TETRA_LC_SCH_HD,	"SCH/HD" },
-	{ TETRA_LC_SCH_HU,	"SCH/HU" },
-	{ TETRA_LC_STCH,	"STCH" },
-	{ TETRA_LC_SCH_P8_F,	"SCH-P8/F" },
-	{ TETRA_LC_SCH_P8_HD,	"SCH-P8/HD" },
-	{ TETRA_LC_SCH_P8_HU,	"SCH-P8/HU" },
-	{ TETRA_LC_AACH,	"AACH" },
-	{ TETRA_LC_TCH,		"TCH" },
-	{ TETRA_LC_BSCH,	"BSCH" },
-	{ TETRA_LC_BNCH,	"BNCH" },
-	{ 0, NULL }
-};
+	{TETRA_LC_UNKNOWN, "UNKNOWN"},
+	{TETRA_LC_SCH_F, "SCH/F"},
+	{TETRA_LC_SCH_H, "SCH/H"},
+	{TETRA_LC_SCH_S, "SCH/S"},
+	{TETRA_LC_SCH_HD, "SCH/HD"},
+	{TETRA_LC_SCH_HU, "SCH/HU"},
+	{TETRA_LC_STCH, "STCH"},
+	{TETRA_LC_SCH_P8_F, "SCH-P8/F"},
+	{TETRA_LC_SCH_P8_HD, "SCH-P8/HD"},
+	{TETRA_LC_SCH_P8_HU, "SCH-P8/HU"},
+	{TETRA_LC_AACH, "AACH"},
+	{TETRA_LC_TCH, "TCH"},
+	{TETRA_LC_BSCH, "BSCH"},
+	{TETRA_LC_BNCH, "BNCH"},
+	{0, NULL}};
 
 const char *tetra_get_lchan_name(enum tetra_log_chan lchan)
 {

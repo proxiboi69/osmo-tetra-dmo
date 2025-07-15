@@ -4,25 +4,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
-#include "tetra_prim.h"
-#include "tetra_common.h"
 #include "hamtetra_timing.h"
 #include "phy/tetra_burst.h"
+#include "tetra_common.h"
+#include "tetra_prim.h"
 
 static const int8_t presence_signal_multiframe_count[8] = {
-	[0] = 0,
-	[1] = 2,
-	[2] = 5,
-	[3] = 10,
+    [0] = 0,
+    [1] = 2,
+    [2] = 5,
+    [3] = 10,
     [4] = 15,
     [5] = 20,
     [6] = 30,
-    [7] = 60
-};
-
+    [7] = 60};
 
 void mac_hamtetra_init();
 

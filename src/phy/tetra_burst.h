@@ -1,10 +1,11 @@
 #ifndef TETRA_BURST_H
 #define TETRA_BURST_H
 
-#include <stdint.h>
 #include "hamtetra_timing.h"
+#include <stdint.h>
 
-enum tp_sap_data_type {
+enum tp_sap_data_type
+{
 	TPSAP_T_SB1,
 	TPSAP_T_SB2,
 	TPSAP_T_NDB,
@@ -13,7 +14,8 @@ enum tp_sap_data_type {
 	TPSAP_T_SCH_F,
 };
 
-enum dp_sap_data_type {
+enum dp_sap_data_type
+{
 	DPSAP_T_DSB1,
 	DPSAP_T_DSB2,
 	DPSAP_T_DNB1,
@@ -26,7 +28,6 @@ enum dp_sap_data_type {
 	DPSAP_T_TCH_S_F,
 	DPSAP_T_TCH_S_H
 };
-
 
 extern void dp_sap_udata_ind(enum dp_sap_data_type type, const uint8_t *bits, unsigned int len, void *priv);
 extern void tp_sap_udata_ind(enum tp_sap_data_type type, const uint8_t *bits, unsigned int len, void *priv);
@@ -44,7 +45,8 @@ int build_dm_sync_burst(uint8_t *buf, const uint8_t *bkn1, const uint8_t *bkn2);
 /* Type: 1 if preamble 1 and training sequence 1 (TCH, SCH/F), anything else if preamble 2 and training sequence 2 (STCH+TCH, STCH+STCH)*/
 int build_dm_norm_burst(uint8_t *buf, const uint8_t *bkn1, const uint8_t *bkn2, const uint8_t type);
 
-enum tetra_train_seq {
+enum tetra_train_seq
+{
 	TETRA_TRAIN_NORM_1,
 	TETRA_TRAIN_NORM_2,
 	TETRA_TRAIN_NORM_3,
@@ -55,7 +57,7 @@ enum tetra_train_seq {
 
 /* find a TETRA training sequence in the burst buffer indicated */
 int tetra_find_train_seq(const uint8_t *in, unsigned int end_of_in,
-			 uint32_t mask_of_train_seq, unsigned int *offset);
+						 uint32_t mask_of_train_seq, unsigned int *offset);
 
 void tetra_burst_dmo_rx_cb2(const uint8_t *burst, unsigned int len, enum tetra_train_seq type, void *priv);
 

@@ -6,11 +6,12 @@
 
 struct timing_state;
 
-struct slotter_state {
+struct slotter_state
+{
 	struct timing_state *timing;
 
 	uint64_t prev_burst_time; // for test
-	int send_count; // for test
+	int send_count;			  // for test
 	struct tetra_mac_state *tms;
 	// TODO
 };

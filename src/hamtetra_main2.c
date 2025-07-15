@@ -2,17 +2,20 @@
  * into libsuo. This way, it runs in the same thread with signal processing
  * in the modem. */
 
-#include "suo.h"
-#include "hamtetra_timing.h"
-#include "hamtetra_slotter.h"
 #include "hamtetra_mac.h"
-#include "signal-io/soapysdr_io.h"
-#include "signal-io/alsa_io.h"
+#include "hamtetra_slotter.h"
+#include "hamtetra_timing.h"
+#include "hamtetra_tmo_mac.h"
 #include "modem/burst_dpsk_receiver.h"
 #include "modem/psk_transmitter.h"
+#include "signal-io/alsa_io.h"
+#include "signal-io/soapysdr_io.h"
+#include "suo.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+
+enum tetra_infrastructure_mode operating_mode;
 
 struct timing_state *timing1;
 struct slotter_state *slotter1;
@@ -20,11 +23,11 @@ static const struct signal_io_code *io_code;
 static void *io_arg;
 
 #define BURST_MAXBITS 600
-struct burst_msg {
+struct burst_msg
+{
 	struct metadata m;
 	uint8_t data[BURST_MAXBITS];
 };
-
 
 static int hamtetra_rx_output_frame(void *arg, const struct frame *in)
 {
@@ -43,12 +46,12 @@ static int hamtetra_rx_output_frame(void *arg, const struct frame *in)
 	return timing_rx_burst(timing1, b.data, len, b.m.time);
 }
 
-
 static int hamtetra_tx_input_frame(void *arg, struct frame *out, size_t maxlen, uint64_t ts)
 {
 	int len;
 	len = timing_tx_burst(timing1, out->data, BURST_MAXBITS, &ts);
-	if (len >= 0) {
+	if (len >= 0)
+	{
 		assert(len <= BURST_MAXBITS);
 		out->m.len = len;
 		out->m.time = ts;
@@ -57,18 +60,15 @@ static int hamtetra_tx_input_frame(void *arg, struct frame *out, size_t maxlen, 
 	return len;
 }
 
-
 static int dummy_tick(void *arg, timestamp_t timenow)
 {
-	(void)arg; (void)timenow;
+	(void)arg;
+	(void)timenow;
 	return 0;
 }
 
-
-const struct rx_output_code hamtetra_rx_output_code = { "HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_rx_output_frame, dummy_tick };
-
-const struct tx_input_code hamtetra_tx_input_code = { "HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_tx_input_frame, dummy_tick };
-
+const struct rx_output_code hamtetra_rx_output_code = {"HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_rx_output_frame, dummy_tick};
+const struct tx_input_code hamtetra_tx_input_code = {"HamTetra", NULL, NULL, NULL, NULL, NULL, hamtetra_tx_input_frame, dummy_tick};
 
 static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 {
@@ -86,11 +86,26 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 
 	mac_hamtetra_init();
 
-	if (strcmp(hw, "file") == 0) {
+	// Initialize mode-specific settings
+	if (mode == 2)
+	{
+		// TMO mode
+		operating_mode = TETRA_INFRA_TMO;
+	}
+	else
+	{
+		// DMO mode
+		operating_mode = TETRA_INFRA_DMO;
+	}
+
+	if (strcmp(hw, "file") == 0)
+	{
 		return -1; // not implemented
-		//io_code = &file_io_code;
-		// TODO: file I/O
-	} else if (strncmp(hw, "alsa:", 5) == 0) {
+				   // io_code = &file_io_code;
+				   //  TODO: file I/O
+	}
+	else if (strncmp(hw, "alsa:", 5) == 0)
+	{
 		samplerate = 48000;
 		offset_freq = 12000;
 
@@ -99,7 +114,7 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 
 		io_conf->samplerate = samplerate;
 		io_conf->rx_name =
-		io_conf->tx_name = strdup(hw + 5);
+			io_conf->tx_name = strdup(hw + 5);
 		io_conf->tx_latency = 480;
 
 		if (mode == 0) // monitor only (doesn't work yet)
@@ -107,27 +122,38 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 
 		io_arg = alsa_io_code.init(io_conf);
 		free(io_conf);
-	} else {
+	}
+	else
+	{
 		io_code = &soapysdr_io_code;
 		struct soapysdr_io_conf *io_conf = soapysdr_io_code.init_conf();
 		io_conf->rx_on = 1;
-		io_conf->tx_on = 1;
 		if (mode == 0) // monitor only
+		{
 			io_conf->tx_on = 0;
-
+		}
+		else
+		{
+			io_conf->tx_on = 1;
+		}
 		io_conf->buffer = 1024;
 		io_conf->tx_latency = 1024 * 10; // somewhat below 2 slots
 
 		// SDR specific configuration
-		if (strcmp(hw, "limesdr") == 0) {
+		if (strcmp(hw, "limesdr") == 0)
+		{
 			io_conf->rx_antenna = "LNAL";
 			io_conf->tx_antenna = "BAND1";
 			goto limesdr_common;
-		} else if (strcmp(hw, "limemini") == 0) {
+		}
+		else if (strcmp(hw, "limemini") == 0)
+		{
 			io_conf->rx_antenna = "LNAW";
 			io_conf->tx_antenna = "BAND2";
 			goto limesdr_common;
-		} else if (strcmp(hw, "limenet") == 0) {
+		}
+		else if (strcmp(hw, "limenet") == 0)
+		{
 			io_conf->rx_antenna = "LNAL";
 			io_conf->tx_antenna = "BAND2";
 		limesdr_common:
@@ -136,34 +162,46 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 			soapysdr_io_code.set_conf(io_conf, "tx_stream:latency", "0");
 			io_conf->rx_gain = 50;
 			io_conf->tx_gain = 50;
-
-		} else if (strcmp(hw, "usrp") == 0) {
+		}
+		else if (strcmp(hw, "usrp") == 0)
+		{
 			soapysdr_io_code.set_conf(io_conf, "device:driver", "uhd");
 			io_conf->rx_antenna = "TX/RX";
 			io_conf->tx_antenna = "TX/RX";
 			io_conf->rx_gain = 50;
 			io_conf->tx_gain = 70;
-
-		} else if (strcmp(hw, "sx") == 0) {
+		}
+		else if (strcmp(hw, "sx") == 0)
+		{
 			soapysdr_io_code.set_conf(io_conf, "device:driver", "sx");
 			io_conf->use_time = 1;
 			io_conf->tx_cont = 1;
 			io_conf->rx_antenna = "RX";
 			io_conf->tx_antenna = "TX";
-			io_conf->rx_gain = 50; // TBD
-			io_conf->tx_gain = 50; // TBD
+			if (mode == 2)
+			{
+				io_conf->rx_gain = 20;
+				io_conf->tx_gain = 20;
+			}
+			else
+			{
+				io_conf->rx_gain = 50; // TBD
+				io_conf->tx_gain = 50; // TBD
+			}
 			// Sample rate is about 1/4 times the default, so reduce buffer sizes to 1/4 too
 			io_conf->buffer /= 4;
 			io_conf->tx_latency /= 4;
-
 			samplerate = 150000.0;
 			offset_freq = 25000.0;
-
-		} else if (strcmp(hw, "audio-in") == 0) {
+		}
+		else if (strcmp(hw, "audio-in") == 0)
+		{
 			// Receive only. Full-duplex audio is not supported yet
 			io_conf->tx_on = 0;
 			goto audio_common;
-		} else if (strcmp(hw, "audio-out") == 0) {
+		}
+		else if (strcmp(hw, "audio-out") == 0)
+		{
 			/* Transmit only. Does not actually work
 			 * since SoapyAudio has no transmit support. */
 			io_conf->rx_on = 0;
@@ -171,23 +209,39 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 			soapysdr_io_code.set_conf(io_conf, "device:driver", "audio");
 			samplerate = 48000;
 			offset_freq = 12000;
-
-		} else if (strcmp(hw, "rtlsdr") == 0) {
+		}
+		else if (strcmp(hw, "rtlsdr") == 0)
+		{
 			soapysdr_io_code.set_conf(io_conf, "device:driver", "rtlsdr");
 			io_conf->tx_on = 0;
 			samplerate = 300000;
 			io_conf->buffer = 0x4000;
 			io_conf->rx_gain = 40;
-		} else {
+		}
+		else
+		{
 			printf("Unknown hardware %s\n", hw);
 			return -1;
 		}
 
 		io_conf->samplerate = samplerate;
-		io_conf->rx_centerfreq =
-		io_conf->tx_centerfreq = tetra_freq - offset_freq;
 
-		if (!io_conf->rx_on) {
+		if (mode == 2)
+		{
+			// TMO Mode: FDD with 10 MHz split
+			printf("TMO mode. Configuring FDD: TX = %.4f MHz, RX = %.4f MHz\n",
+				   tetra_freq / 1e6, (tetra_freq - 10e6) / 1e6);
+			io_conf->tx_centerfreq = tetra_freq - offset_freq;
+			io_conf->rx_centerfreq = (tetra_freq - 10e6) - offset_freq;
+		}
+		else
+		{
+			io_conf->rx_centerfreq =
+				io_conf->tx_centerfreq = tetra_freq - offset_freq;
+		}
+
+		if (!io_conf->rx_on)
+		{
 			// This works better for TX-only use
 			io_conf->tx_cont = 1;
 			io_conf->use_time = 0;
@@ -224,35 +278,37 @@ static int hamtetra_init(const char *hw, double tetra_freq, int mode)
 	return 0;
 }
 
-
 int main(int argc, char *argv[])
 {
-	if (argc < 3) {
+	if (argc < 3)
+	{
 		fprintf(stderr,
-			"Use: %s HARDWARE FREQUENCY [MODE]\n"
-			"HARDWARE options are:\n"
-			"   limesdr   LimeSDR USB, antennas on RX1_L and TX1_1 ports\n"
-			"   limemini  LimeSDR Mini\n"
-			"   limenet   LimeNET Micro\n"
-			"   usrp      USRP B200\n"
-			"   sx        SXceiver\n"
-			"   rtlsdr    RTL-SDR (receive only)\n"
-			"   audio-in  Audio centered at 12 kHz (receive only, through SoapyAudio)\n"
-			"   alsa:NAME Audio centered at 12 kHz (full duplex through ALSA)\n"
-			"             NAME is soundcard name, e.g. hw:0,0\n"
-			"MODE options are:\n"
-			"   0         DMO monitor\n"
-			"   1         DMO repeater (default)\n"
-			"FREQUENCY is TETRA signal center frequency in MHz.\n"
-			"For example: %s limemini 416.2375 0\n",
-			argv[0], argv[0]);
+				"Use: %s HARDWARE FREQUENCY [MODE]\n"
+				"HARDWARE options are:\n"
+				"   limesdr   LimeSDR USB, antennas on RX1_L and TX1_1 ports\n"
+				"   limemini  LimeSDR Mini\n"
+				"   limenet   LimeNET Micro\n"
+				"   usrp      USRP B200\n"
+				"   sx        SXceiver\n"
+				"   rtlsdr    RTL-SDR (receive only)\n"
+				"   audio-in  Audio centered at 12 kHz (receive only, through SoapyAudio)\n"
+				"   alsa:NAME Audio centered at 12 kHz (full duplex through ALSA)\n"
+				"             NAME is soundcard name, e.g. hw:0,0\n"
+				"MODE options are:\n"
+				"   0         DMO monitor\n"
+				"   1         DMO repeater (default)\n"
+				"   2         TMO BTS\n"
+				"FREQUENCY is TETRA signal center frequency in MHz.\n"
+				"For example: %s limemini 416.2375 0\n",
+				argv[0], argv[0]);
 		return 1;
 	}
 
 	int mode = 1;
 	if (argc >= 4)
 		mode = atoi(argv[3]);
-	if (hamtetra_init(argv[1], 1e6 * atof(argv[2]), mode) < 0) {
+	if (hamtetra_init(argv[1], 1e6 * atof(argv[2]), mode) < 0)
+	{
 		fprintf(stderr, "Initialization failed\n");
 		return 2;
 	}
